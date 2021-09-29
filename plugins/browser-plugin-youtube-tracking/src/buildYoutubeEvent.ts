@@ -23,7 +23,7 @@ let currentTime: number = 0;
 
 function seekEventTracker(player: YT.Player, eventData: YTEventData) {
   let playerTime = player.getCurrentTime();
-  if (Math.abs(playerTime - (currentTime + 0.5)) > 2) {
+  if (Math.abs(playerTime - (currentTime + 0.5)) > 1) {
     eventData.eventName = YTCustomEvent.SEEK;
     buildYoutubeEvent(player, eventData);
   }
@@ -31,18 +31,13 @@ function seekEventTracker(player: YT.Player, eventData: YTEventData) {
 }
 
 export function buildYoutubeEvent(player: YT.Player, eventData: YTEventData, eventDetail?: any) {
-  const eventActions: { [index: string]: any } = {
+  const eventActions: { [event: string]: Function } = {
     [YTStateEvent.PLAYING]: () => {
       if (scrubInterval === undefined) {
         scrubInterval = setInterval(() => {
           seekEventTracker(player, eventData);
         }, 500);
       }
-    },
-
-    [YTStateEvent.PAUSED]: () => {
-      clearInterval(scrubInterval);
-      scrubInterval = undefined;
     },
   };
 
