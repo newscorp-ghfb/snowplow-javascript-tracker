@@ -1,31 +1,28 @@
 import { buildYoutubeEvent } from './buildYoutubeEvent';
 import { SnowplowMediaEvent } from './snowplowEvents';
-import { MediaConf } from './types';
 import { YTStateEvent } from './youtubeEntities';
 
-export function progressHandler(player: YT.Player, e: any, conf: MediaConf) {
+export function progressHandler(player: YT.Player, e: any, percentTimeoutIds: any, percentBoundries: number[]) {
   if (e === YTStateEvent.PAUSED) {
-    while (conf.percentTimeoutIds.length) {
-      clearTimeout(conf.percentTimeoutIds.pop());
+    while (percentTimeoutIds.length) {
+      clearTimeout(percentTimeoutIds.pop());
     }
   }
 
   if (e === YTStateEvent.PLAYING) {
-    setPercentageBoundTimeouts(player, conf);
+    setPercentageBoundTimeouts(player, percentTimeoutIds, percentBoundries);
   }
 }
 
-export function setPercentageBoundTimeouts(player: YT.Player, conf: MediaConf) {
+export function setPercentageBoundTimeouts(player: YT.Player, percentTimeoutIds: any, percentBoundries: number[]) {
   let currentTime = player.getCurrentTime();
-  for (let p of conf.percentBoundries) {
+  for (let p of percentBoundries) {
     let percentTime = player.getDuration() * 1000 * (p / 100);
     if (currentTime === 0) {
       percentTime -= currentTime * 1000;
     }
     if (p < percentTime) {
-      conf.percentTimeoutIds.push(
-        setTimeout(() => waitAnyRemainingTimeAfterTimeout(player, percentTime, p), percentTime)
-      );
+      percentTimeoutIds.push(setTimeout(() => waitAnyRemainingTimeAfterTimeout(player, percentTime, p), percentTime));
     }
   }
 }
@@ -40,6 +37,6 @@ function waitAnyRemainingTimeAfterTimeout(player: YT.Player, percentTime: number
   if (player.getCurrentTime() * 1000 < percentTime) {
     setTimeout(() => waitAnyRemainingTimeAfterTimeout(player, percentTime, p), 10);
   } else {
-    buildYoutubeEvent(player, { eventName: SnowplowMediaEvent.PERCENTPROGRESS }, { percentThrough: p });
+    buildYoutubeEvent(player, SnowplowMediaEvent.PERCENTPROGRESS, { percentThrough: p });
   }
 }
