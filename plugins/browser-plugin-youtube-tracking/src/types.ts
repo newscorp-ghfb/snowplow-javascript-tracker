@@ -1,8 +1,8 @@
-import { MediaElement, MediaPlayerEvent, VideoElement } from './contexts';
+import { MediaPlayerEvent } from './contexts';
 import { SnowplowMediaEvent } from './snowplowEvents';
-import { YTCustomEvent, YTEvent, YTState, YTStateEvent } from './youtubeEntities';
+import { YTCustomEvent, YTPlayerEvent, YTStateEvent } from './youtubeEntities';
 
-export type EventGroup = YT.Events | SnowplowMediaEvent;
+export type EventGroup = (YTStateEvent | SnowplowMediaEvent | YTCustomEvent | YTPlayerEvent | string)[];
 
 export interface MediaConf {
   mediaId: string;
@@ -11,6 +11,12 @@ export interface MediaConf {
   mediaLabel?: string;
   percentTimeoutIds: any[];
   volumeChangeTimeout?: any;
+}
+
+export interface TrackingOptions {
+  percentBoundries?: number[];
+  captureEvents?: EventGroup | string[];
+  mediaLabel?: string;
 }
 
 export interface SnowplowYoutubeData {
@@ -26,7 +32,7 @@ export interface MediaEventData {
 
 export interface MediaEntities {
   schema: string;
-  data: MediaElement | VideoElement | SnowplowYoutubeData;
+  data: SnowplowYoutubeData;
 }
 
 export interface TextTrackObject {
@@ -37,12 +43,7 @@ export interface TextTrackObject {
 }
 
 export interface YTEventData {
-  id?: string;
   params?: any;
-  eventName: YTEvent | YTStateEvent | YTCustomEvent | SnowplowMediaEvent;
-  customData?: any;
-  activeState?: typeof YTState;
-  currentTime?: number;
-  scrubInterval?: any;
+  eventName: YTPlayerEvent | YTStateEvent | YTCustomEvent | SnowplowMediaEvent;
   [index: string]: any;
 }

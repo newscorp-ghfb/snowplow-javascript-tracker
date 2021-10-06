@@ -39,7 +39,7 @@ export enum YTEntityFunction {
 // The payload a YouTube player event emits has no identifier of what event it is
 // Some payloads can emit the same data
 // i.e. onError and onPlaybackRateChange can both emit '{data: 2}'
-export enum YTEvent {
+export enum YTPlayerEvent {
   ONREADY = 'onReady',
   ONSTATECHANGE = 'onStateChange',
   ONPLAYBACKQUALITYCHANGE = 'onPlaybackQualityChange',
@@ -58,14 +58,6 @@ export enum YTStateEvent {
   CUED = 'CUED',
 }
 
-export const YTError: { [index: number]: string } = {
-  2: 'INVALID_URL',
-  5: 'HTML5_ERROR',
-  100: 'VIDEO_NOT_FOUND',
-  101: 'MISSING_EMBED_PERMISSION',
-  150: 'MISSING_EMBED_PERMISSION_ALT',
-};
-
 export enum YTState {
   UNSTARTED = -1,
   ENDED = 0,
@@ -74,6 +66,14 @@ export enum YTState {
   BUFFERING = 3,
   CUED = 5,
 }
+
+export const YTError: { [index: number]: string } = {
+  2: 'INVALID_URL',
+  5: 'HTML5_ERROR',
+  100: 'VIDEO_NOT_FOUND',
+  101: 'MISSING_EMBED_PERMISSION',
+  150: 'MISSING_EMBED_PERMISSION_ALT',
+};
 
 export const YTStateName: { [index: string]: string } = {
   '-1': 'unstarted',

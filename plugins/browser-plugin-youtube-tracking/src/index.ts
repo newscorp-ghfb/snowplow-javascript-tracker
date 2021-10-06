@@ -27,41 +27,45 @@
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-import { BrowserPlugin, BrowserTracker, dispatchToTrackersInCollection } from '@snowplow/browser-tracker-core';
-import { buildSelfDescribingEvent, CommonEventProperties, SelfDescribingJson } from '@snowplow/tracker-core';
-import { MediaPlayerEvent } from './contexts';
 import { buildYoutubeEvent } from './buildYoutubeEvent';
 import { getAllUrlParams } from './helperFunctions';
-import { YTError, YTEvent, YTState } from './youtubeEntities';
-import { MediaEventData } from './types';
+import { YTError, YTPlayerEvent, YTState, YTStateEvent } from './youtubeEntities';
+import { MediaConf, MediaEventData } from './types';
+import { stateChangeEvents, YTEventName } from './youtubeEvents';
+import { TrackingOptions } from './types';
+import { DefaultEvents, EventGroups } from './eventGroups';
+import { trackYoutubeEvent } from './plugin';
 
-const _trackers: Record<string, BrowserTracker> = {};
-
-export function YouTubeTrackingPlugin(): BrowserPlugin {
-  return {
-    activateBrowserPlugin: (tracker: BrowserTracker) => {
-      _trackers[tracker.id] = tracker;
-    },
+function configSorter(mediaId: string, options?: TrackingOptions): MediaConf {
+  let defaults: MediaConf = {
+    mediaId: mediaId,
+    captureEvents: DefaultEvents,
+    percentBoundries: [10, 25, 50, 75],
+    percentTimeoutIds: [],
   };
+  if (options?.captureEvents) {
+    let namedEvents = [];
+    for (let ev of options.captureEvents) {
+      if (EventGroups.hasOwnProperty(ev)) {
+        for (let event of EventGroups[ev]) {
+          namedEvents.push(event);
+        }
+      } else if (!Object.keys(YTEventName).filter((k) => YTEventName[k] === ev)) {
+        console.error(`'${ev}' is not a valid captureEvent.`);
+      } else {
+        namedEvents.push(Object.keys(YTEventName).filter((k) => YTEventName[k] === ev)[0] || ev);
+      }
+    }
+
+    options.captureEvents = namedEvents;
+  }
+  return { ...defaults, ...options };
 }
 
-export function enableYoutubeTracking(id: string): any | null {
-  let el: HTMLIFrameElement = document.getElementById(id) as HTMLIFrameElement;
-  console.log(el);
-  let player: YT.Player;
-  let queryStringParams: { [index: string]: string[] | string | number } = getAllUrlParams(el.src!);
+export function enableYoutubeTracking(id: string, trackingOptions?: TrackingOptions) {
+  let config = configSorter(id, trackingOptions);
 
-  if (!queryStringParams.hasOwnProperty('enablejsapi')) {
-    queryStringParams['enablejsapi'] = 1;
-  }
-  let url: string = el.src?.split('?')[0];
-  if (url && url.length > 1) {
-    el.src +=
-      '?' +
-      Object.keys(queryStringParams)
-        .map((k) => `${k}=${queryStringParams[k]}`)
-        .join('&');
-  }
+  let el: HTMLIFrameElement = document.getElementById(id) as HTMLIFrameElement;
 
   const tag: HTMLScriptElement = document.createElement('script');
   tag.id = 'test';
@@ -70,36 +74,63 @@ export function enableYoutubeTracking(id: string): any | null {
   firstScriptTag.parentNode!.insertBefore(tag, firstScriptTag);
 
   window.onYouTubeIframeAPIReady = () => {
-    let funcData: any = {
-      id: el.id,
-      params: queryStringParams,
-    };
-    const trackEvent = (eventName: any, eventSpecificData?: any) => {
-      let youtubeEvent: MediaEventData = buildYoutubeEvent(player, {
-        eventName: eventName,
-        ...funcData,
-        ...eventSpecificData,
-      });
-      trackYoutubeEvent(youtubeEvent);
-    };
-    player = new YT.Player(el.id!, {
-      events: {
-        onReady: () => trackEvent(YTEvent.ONPLAYERREADY),
-        onStateChange: (e: YT.OnStateChangeEvent) => trackEvent(YTEvent.ONSTATECHANGE, { eventName: YTState[e.data] }),
-        onPlaybackQualityChange: () => trackEvent(YTEvent.ONPLAYBACKQUALITYCHANGE),
-        onApiChange: () => trackEvent(YTEvent.ONAPICHANGE),
-        onError: (e: YT.OnErrorEvent) => trackEvent(YTEvent.ONERROR, { error: YTError[e.data] }),
-        onPlaybackRateChange: () => trackEvent(YTEvent.ONPLAYBACKRATECHANGE),
-      },
-    });
+    let queryStringParams: { [index: string]: string[] | string | number } = getAllUrlParams(el.src!);
+
+    if (!queryStringParams.hasOwnProperty('enablejsapi')) {
+      queryStringParams['enablejsapi'] = 1;
+    }
+    let url: string = el.src?.split('?')[0];
+    if (url && url.length > 1) {
+      el.src +=
+        '?' +
+        Object.keys(queryStringParams)
+          .map((k) => `${k}=${queryStringParams[k]}`)
+          .join('&');
+    }
+    playerSetup(el, config, queryStringParams);
   };
 }
 
-function trackYoutubeEvent(
-  event: SelfDescribingJson<MediaPlayerEvent> & CommonEventProperties,
-  trackers: Array<string> = Object.keys(_trackers)
-): void {
-  dispatchToTrackersInCollection(trackers, _trackers, (t) => {
-    t.core.track(buildSelfDescribingEvent({ event }), event.context, event.timestamp);
+function playerSetup(el: HTMLIFrameElement, config: TrackingOptions, queryStringParams: any) {
+  let builtInEvents: { [event: string]: { [playerEvent: string]: Function } } = {
+    [YTPlayerEvent.ONPLAYERREADY]: { onReady: () => trackEvent(YTPlayerEvent.ONPLAYERREADY) },
+    [YTPlayerEvent.ONSTATECHANGE]: {
+      onStateChange: (e: YT.OnStateChangeEvent) => {
+        if (config.captureEvents?.indexOf(YTState[e.data] as YTPlayerEvent) !== -1) {
+          trackEvent(YTPlayerEvent.ONSTATECHANGE, { eventName: YTState[e.data] });
+        }
+      },
+    },
+    [YTPlayerEvent.ONPLAYBACKQUALITYCHANGE]: {
+      onPlaybackQualityChange: () => trackEvent(YTPlayerEvent.ONPLAYBACKQUALITYCHANGE),
+    },
+    [YTPlayerEvent.ONAPICHANGE]: { onApiChange: () => trackEvent(YTPlayerEvent.ONAPICHANGE) },
+    [YTPlayerEvent.ONERROR]: {
+      onError: (e: YT.OnErrorEvent) => trackEvent(YTPlayerEvent.ONERROR, { error: YTError[e.data] }),
+    },
+    [YTPlayerEvent.ONPLAYBACKRATECHANGE]: {
+      onPlaybackRateChange: () => trackEvent(YTPlayerEvent.ONPLAYBACKRATECHANGE),
+    },
+  };
+
+  let playerEvents = {};
+  if (config.captureEvents?.some((event) => stateChangeEvents.indexOf(event as YTStateEvent) >= 0)) {
+    playerEvents = { ...playerEvents, ...builtInEvents[YTPlayerEvent.ONSTATECHANGE] };
+  }
+  if (config.captureEvents) {
+    for (let ev of config.captureEvents) {
+      if (ev in builtInEvents) {
+        playerEvents = { ...playerEvents, ...builtInEvents[ev] };
+      }
+    }
+  }
+
+  let player = new YT.Player(el.id!, {
+    events: { ...playerEvents },
   });
+
+  const trackEvent = (eventName: any, eventSpecificData?: any) => {
+    let youtubeEvent: MediaEventData = buildYoutubeEvent(player, eventName, queryStringParams, eventSpecificData);
+    trackYoutubeEvent(youtubeEvent);
+  };
 }

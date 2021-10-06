@@ -1,7 +1,8 @@
 import { MediaPlayerEvent } from './contexts';
 import { queryParamPresentAndEnabled } from './helperFunctions';
+import { trackYoutubeEvent } from './plugin';
 import { SnowplowMediaEvent } from './snowplowEvents';
-import { MediaEntities, YTEventData } from './types';
+import { MediaEntities } from './types';
 import {
   YTCustomEvent,
   YTEntityFunction,
@@ -10,6 +11,7 @@ import {
   YTStateEvent,
   YTStateName,
 } from './youtubeEntities';
+import { YTEventName } from './youtubeEvents';
 
 declare global {
   interface Window {
@@ -18,40 +20,25 @@ declare global {
   }
 }
 
-let scrubInterval: any;
-let currentTime: number = 0;
+let isSeekTrackingEnabled: boolean = false;
 
-function seekEventTracker(player: YT.Player, eventData: YTEventData) {
-  let playerTime = player.getCurrentTime();
-  if (Math.abs(playerTime - (currentTime + 0.5)) > 1) {
-    eventData.eventName = YTCustomEvent.SEEK;
-    buildYoutubeEvent(player, eventData);
-  }
-  currentTime = playerTime;
-}
-
-export function buildYoutubeEvent(player: YT.Player, eventData: YTEventData, eventDetail?: any) {
+export function buildYoutubeEvent(player: YT.Player, eventName: string, eventParamas: any, eventDetail?: any) {
   const eventActions: { [event: string]: Function } = {
     [YTStateEvent.PLAYING]: () => {
-      if (scrubInterval === undefined) {
-        scrubInterval = setInterval(() => {
-          seekEventTracker(player, eventData);
-        }, 500);
-      }
+      if (!isSeekTrackingEnabled) enableSeekTracking(player, eventParamas, eventDetail);
     },
   };
 
-  if (eventData.eventName in eventActions) eventActions[eventData.eventName]();
+  if (eventName in eventActions) eventActions[eventName]();
 
   let mediaEventData: MediaPlayerEvent = {
-    type: eventData.eventName,
-    player_id: eventData.htmlId,
+    type: eventName in YTEventName ? YTEventName[eventName] : eventName,
     media_type: 'VIDEO',
   };
 
-  let mediaContext = [getYoutubePlayerEntities(player, eventData)];
+  let mediaContext = [getYoutubePlayerEntities(player, eventParamas)];
 
-  let snowplowContext = getSnowplowEntities(eventData.eventName, eventDetail);
+  let snowplowContext = getSnowplowEntities(eventName, eventDetail);
   if (snowplowContext) mediaContext.push(snowplowContext);
 
   return {
@@ -77,7 +64,7 @@ function getSnowplowEntities(e: any, eventDetail: any): MediaEntities | null {
   };
 }
 
-function getYoutubePlayerEntities(player: YT.Player, eventData: any): any {
+function getYoutubePlayerEntities(player: YT.Player, eventParams: any): any {
   let playerState: { [index: string]: boolean } = {};
   for (let s of Object.keys(YTState)) {
     if (YTStateName.hasOwnProperty(s)) playerState[YTStateName[s]] = false;
@@ -85,30 +72,48 @@ function getYoutubePlayerEntities(player: YT.Player, eventData: any): any {
   playerState[YTStateName[player.getPlayerState()]] = true;
 
   let spherical: YT.SphericalProperties = player.getSphericalProperties();
+  if (spherical.fov) {
+    spherical.fov = parseFloat(spherical.fov.toFixed(2));
+  }
 
   let data = {
-    auto_play: queryParamPresentAndEnabled(YTQueryStringParameter.AUTOPLAY, eventData.params),
+    player_id: player.getIframe().id,
+    auto_play: queryParamPresentAndEnabled(YTQueryStringParameter.AUTOPLAY, eventParams),
     avaliable_playback_rates: player.getAvailablePlaybackRates(),
-    controls: queryParamPresentAndEnabled(YTQueryStringParameter.CONTROLS, eventData.params),
+    controls: queryParamPresentAndEnabled(YTQueryStringParameter.CONTROLS, eventParams),
     current_time: player[YTEntityFunction.CURRENTTIME](),
     default_playback_rate: 1,
     duration: player[YTEntityFunction.DURATION](),
-    loaded: player[YTEntityFunction.VIDEOLOADEDFRACTION](),
+    loaded: parseFloat(player[YTEntityFunction.VIDEOLOADEDFRACTION]().toFixed(2)),
     muted: player[YTEntityFunction.MUTED](),
-    origin: queryParamPresentAndEnabled(YTQueryStringParameter.ORIGIN, eventData.params),
+    origin: eventParams[YTQueryStringParameter.ORIGIN],
     playback_rate: player[YTEntityFunction.PLAYBACKRATE](),
     playlist_index: player[YTEntityFunction.PLAYLISTINDEX](),
     playlist: player[YTEntityFunction.PLAYLIST](),
     url: player[YTEntityFunction.VIDEOURL](),
     volume: player[YTEntityFunction.VOLUME](),
-    loop: queryParamPresentAndEnabled(YTQueryStringParameter.LOOP, eventData.params),
+    loop: queryParamPresentAndEnabled(YTQueryStringParameter.LOOP, eventParams),
     ...playerState,
-    ...eventData.customData,
     ...spherical,
   };
 
   return {
-    schema: 'iglu:org.google/youtube/jsonschema/1-0-0',
+    schema: 'iglu:org.youtube/youtube/jsonschema/1-0-0',
     data: data,
   };
+}
+
+let currentTime: number = 0;
+
+export function enableSeekTracking(player: YT.Player, eventParamas: any, eventDetail?: any) {
+  setInterval(() => seekEventTracker(player, eventParamas, eventDetail), 500);
+}
+
+function seekEventTracker(player: YT.Player, eventParamas: any, eventDetail?: any) {
+  let playerTime = player.getCurrentTime();
+  if (Math.abs(playerTime - (currentTime + 0.5)) > 1) {
+    let youtubeEvent = buildYoutubeEvent(player, YTCustomEvent.SEEK, eventParamas, eventDetail);
+    trackYoutubeEvent(youtubeEvent);
+  }
+  currentTime = playerTime;
 }
