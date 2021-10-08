@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<head>
+  <title>Page for YouTube tracking testing with Snowplow Micro</title>
+  <script>
+    const collector_endpoint = document.cookie.split('container=')[1].split(';')[0].trim();
+    document.body.className += ' loaded';
+  </script>
+  <script>
+    (function (p, l, o, w, i, n, g) {
+      if (!p[i]) {
+        p.GlobalSnowplowNamespace = p.GlobalSnowplowNamespace || [];
+        p.GlobalSnowplowNamespace.push(i);
+        p[i] = function () {
+          (p[i].q = p[i].q || []).push(arguments);
+        };
+        p[i].q = p[i].q || [];
+        n = l.createElement(o);
+        g = l.getElementsByTagName(o)[0];
+        n.async = 1;
+        n.src = w;
+        g.parentNode.insertBefore(n, g);
+      }
+    })(window, document, 'script', './sp.js', 'snowplow');
+
+    document.write(collector_endpoint);
+
+    window.snowplow('newTracker', 'sp2', collector_endpoint, {
+      appId: 'youtube-track-test',
+    });
+
+    window.snowplow(
+      'addPlugin',
+      'https://cdn.jsdelivr.net/npm/@snowplow/browser-plugin-debugger@latest/dist/index.umd.min.js',
+      ['snowplowDebugger', 'DebuggerPlugin'],
+      [4]
+    );
+
+    let otherthing = { mediaLabel: 'youtube-test', captureEvents: 'AllEvents' };
+    window.snowplow('enableYoutubeTracking', 'youtube', otherthing);
+  </script>
+</head>
+<body>
+  <iframe
+    id="youtube"
+    width="560"
+    height="315"
+    src="https://www.youtube-nocookie.com/embed/YSOntr9COeM"
+    title="YouTube video player"
+    frameborder="0"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+    allowfullscreen
+  ></iframe>
+</body>

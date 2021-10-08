@@ -12,6 +12,16 @@
             "uri": "http://iglucentral.com"
           }
         }
+      },
+      {
+        "name": "Github",
+        "priority": 0,
+        "vendorPrefixes": ["com.snowplowanalytics", "org.youtube"],
+        "connection": {
+          "http": {
+            "uri": "https://raw.githubusercontent.com/snowplow-incubator/web-video-tracking-examples/dev"
+          }
+        }
       }
     ]
   }
