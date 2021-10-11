@@ -32,7 +32,7 @@ import { AllEvents, DefaultEvents } from '../src/eventGroups';
 import { configParser } from '../src/index';
 import { MediaConf } from '../src/types';
 
-describe('configSorter', () => {
+describe('config parser', () => {
   const default_output: MediaConf = {
     mediaId: 'youtube',
     captureEvents: DefaultEvents,
