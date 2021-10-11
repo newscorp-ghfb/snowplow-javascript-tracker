@@ -32,7 +32,6 @@ import { YTCustomEvent, YTError, YTPlayerEvent, YTState, YTStateEvent } from './
 import { MediaConf, MediaEventData } from './types';
 import { stateChangeEvents, YTEventName } from './youtubeEvents';
 import { TrackingOptions } from './types';
-import { DefaultEvents, EventGroups } from './eventGroups';
 import { BrowserPlugin, BrowserTracker, dispatchToTrackersInCollection } from '@snowplow/browser-tracker-core';
 import { buildSelfDescribingEvent, CommonEventProperties, SelfDescribingJson } from '@snowplow/tracker-core';
 import { queryParamPresentAndEnabled } from './helperFunctions';
@@ -40,6 +39,7 @@ import { SnowplowMediaEvent } from './snowplowEvents';
 import { MediaEntities } from './types';
 import { YTEntityFunction, YTQueryStringParameter, YTStateName } from './youtubeEntities';
 import { MediaPlayerEvent } from './contexts';
+import { DefaultEvents, EventGroups } from './eventGroups';
 
 declare global {
   interface Window {
@@ -67,7 +67,7 @@ export function trackYoutubeEvent(
   });
 }
 
-function configSorter(mediaId: string, options?: TrackingOptions): MediaConf {
+export function configParser(mediaId: string, options?: TrackingOptions): MediaConf {
   let defaults: MediaConf = {
     mediaId: mediaId,
     captureEvents: DefaultEvents,
@@ -96,8 +96,7 @@ function configSorter(mediaId: string, options?: TrackingOptions): MediaConf {
 }
 
 export function enableYoutubeTracking(args: { id: string; trackingOptions?: TrackingOptions }) {
-  let config = configSorter(args.id, args.trackingOptions);
-  console.log(config);
+  let config = configParser(args.id, args.trackingOptions);
   let el: HTMLIFrameElement = document.getElementById(args.id) as HTMLIFrameElement;
 
   const tag: HTMLScriptElement = document.createElement('script');
