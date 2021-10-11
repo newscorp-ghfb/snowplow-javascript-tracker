@@ -59,27 +59,29 @@ describe('YouTube Tracker', () => {
 
   it('tracks play', () => {
     player.click();
-    browser.pause(1000);
     return fetchMostRecentResult(docker.url).then((result) => {
       expect(result.event.unstruct_event.data.data.type).toEqual('play');
     });
   });
 
-  it('tracks seeking', () => {
-    player.moveTo({ xOffset: 150, yOffset: 270 });
-    browser.pause(1000);
+  it('tracks pause', () => {
     player.click();
     return fetchMostRecentResult(docker.url).then((result) => {
       expect(result.event.unstruct_event.data.data.type).toEqual('pause');
     });
   });
 
-  it('tracks pause', () => {
-    player.moveTo({ xOffset: 10, yOffset: 300 });
-    player.click();
-    browser.pause(1000);
+  it('tracks seek', () => {
+    browser.keys(['ArrowRight']);
     return fetchMostRecentResult(docker.url).then((result) => {
       expect(result.event.unstruct_event.data.data.type).toEqual('seek');
+    });
+  });
+
+  it('tracks playback rate change', () => {
+    player.keys(['>']);
+    return fetchMostRecentResult(docker.url).then((result) => {
+      expect(result.event.unstruct_event.data.data.type).toEqual('playbackratechange');
     });
   });
 });

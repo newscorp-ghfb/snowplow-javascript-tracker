@@ -35,8 +35,15 @@
       [4]
     );
 
-    let otherthing = { mediaLabel: 'youtube-test', captureEvents: 'AllEvents' };
-    window.snowplow('enableYoutubeTracking', 'youtube', otherthing);
+    let args = {
+      id: 'youtube',
+      trackingOptions: {
+        mediaLabel: 'youtube-test',
+        captureEvents: ['DefaultEvents'],
+      },
+    };
+
+    window.snowplow('enableYoutubeTracking', args);
   </script>
 </head>
 <body>
@@ -46,6 +53,7 @@
     height="315"
     src="https://www.youtube-nocookie.com/embed/YSOntr9COeM"
     title="YouTube video player"
+    rel="0"
     frameborder="0"
     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
     allowfullscreen
