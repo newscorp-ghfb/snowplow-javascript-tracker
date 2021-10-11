@@ -27,14 +27,45 @@
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-import { buildYoutubeEvent } from './buildYoutubeEvent';
 import { getAllUrlParams } from './helperFunctions';
-import { YTError, YTPlayerEvent, YTState, YTStateEvent } from './youtubeEntities';
+import { YTCustomEvent, YTError, YTPlayerEvent, YTState, YTStateEvent } from './youtubeEntities';
 import { MediaConf, MediaEventData } from './types';
 import { stateChangeEvents, YTEventName } from './youtubeEvents';
 import { TrackingOptions } from './types';
 import { DefaultEvents, EventGroups } from './eventGroups';
-import { trackYoutubeEvent } from './plugin';
+import { BrowserPlugin, BrowserTracker, dispatchToTrackersInCollection } from '@snowplow/browser-tracker-core';
+import { buildSelfDescribingEvent, CommonEventProperties, SelfDescribingJson } from '@snowplow/tracker-core';
+import { queryParamPresentAndEnabled } from './helperFunctions';
+import { SnowplowMediaEvent } from './snowplowEvents';
+import { MediaEntities } from './types';
+import { YTEntityFunction, YTQueryStringParameter, YTStateName } from './youtubeEntities';
+import { MediaPlayerEvent } from './contexts';
+
+declare global {
+  interface Window {
+    onYouTubeIframeAPIReady?: any;
+    YT: any;
+  }
+}
+
+export const _trackers: Record<string, BrowserTracker> = {};
+
+export function YouTubeTrackingPlugin(): BrowserPlugin {
+  return {
+    activateBrowserPlugin: (tracker: BrowserTracker) => {
+      _trackers[tracker.id] = tracker;
+    },
+  };
+}
+
+export function trackYoutubeEvent(
+  event: SelfDescribingJson<MediaPlayerEvent> & CommonEventProperties,
+  trackers: Array<string> = Object.keys(_trackers)
+): void {
+  dispatchToTrackersInCollection(trackers, _trackers, (t) => {
+    t.core.track(buildSelfDescribingEvent({ event }), event.context, event.timestamp);
+  });
+}
 
 function configSorter(mediaId: string, options?: TrackingOptions): MediaConf {
   let defaults: MediaConf = {
@@ -48,7 +79,9 @@ function configSorter(mediaId: string, options?: TrackingOptions): MediaConf {
     for (let ev of options.captureEvents) {
       if (EventGroups.hasOwnProperty(ev)) {
         for (let event of EventGroups[ev]) {
-          namedEvents.push(event);
+          if (namedEvents.indexOf(event) === -1) {
+            namedEvents.push(event);
+          }
         }
       } else if (!Object.keys(YTEventName).filter((k) => YTEventName[k] === ev)) {
         console.error(`'${ev}' is not a valid captureEvent.`);
@@ -62,10 +95,10 @@ function configSorter(mediaId: string, options?: TrackingOptions): MediaConf {
   return { ...defaults, ...options };
 }
 
-export function enableYoutubeTracking(id: string, trackingOptions?: TrackingOptions) {
-  let config = configSorter(id, trackingOptions);
-
-  let el: HTMLIFrameElement = document.getElementById(id) as HTMLIFrameElement;
+export function enableYoutubeTracking(args: { id: string; trackingOptions?: TrackingOptions }) {
+  let config = configSorter(args.id, args.trackingOptions);
+  console.log(config);
+  let el: HTMLIFrameElement = document.getElementById(args.id) as HTMLIFrameElement;
 
   const tag: HTMLScriptElement = document.createElement('script');
   tag.id = 'test';
@@ -93,23 +126,28 @@ export function enableYoutubeTracking(id: string, trackingOptions?: TrackingOpti
 
 function playerSetup(el: HTMLIFrameElement, config: TrackingOptions, queryStringParams: any) {
   let builtInEvents: { [event: string]: { [playerEvent: string]: Function } } = {
-    [YTPlayerEvent.ONPLAYERREADY]: { onReady: () => trackEvent(YTPlayerEvent.ONPLAYERREADY) },
+    [YTPlayerEvent.ONPLAYERREADY]: {
+      onReady: () => trackEvent(player, YTPlayerEvent.ONPLAYERREADY, queryStringParams),
+    },
     [YTPlayerEvent.ONSTATECHANGE]: {
       onStateChange: (e: YT.OnStateChangeEvent) => {
         if (config.captureEvents?.indexOf(YTState[e.data] as YTPlayerEvent) !== -1) {
-          trackEvent(YTPlayerEvent.ONSTATECHANGE, { eventName: YTState[e.data] });
+          trackEvent(player, YTState[e.data], queryStringParams);
         }
       },
     },
     [YTPlayerEvent.ONPLAYBACKQUALITYCHANGE]: {
-      onPlaybackQualityChange: () => trackEvent(YTPlayerEvent.ONPLAYBACKQUALITYCHANGE),
+      onPlaybackQualityChange: () => trackEvent(player, YTPlayerEvent.ONPLAYBACKQUALITYCHANGE, queryStringParams),
     },
-    [YTPlayerEvent.ONAPICHANGE]: { onApiChange: () => trackEvent(YTPlayerEvent.ONAPICHANGE) },
+    [YTPlayerEvent.ONAPICHANGE]: {
+      onApiChange: () => trackEvent(player, YTPlayerEvent.ONAPICHANGE, queryStringParams),
+    },
     [YTPlayerEvent.ONERROR]: {
-      onError: (e: YT.OnErrorEvent) => trackEvent(YTPlayerEvent.ONERROR, { error: YTError[e.data] }),
+      onError: (e: YT.OnErrorEvent) =>
+        trackEvent(player, YTPlayerEvent.ONERROR, queryStringParams, { error: YTError[e.data] }),
     },
     [YTPlayerEvent.ONPLAYBACKRATECHANGE]: {
-      onPlaybackRateChange: () => trackEvent(YTPlayerEvent.ONPLAYBACKRATECHANGE),
+      onPlaybackRateChange: () => trackEvent(player, YTPlayerEvent.ONPLAYBACKRATECHANGE, queryStringParams),
     },
   };
 
@@ -128,9 +166,112 @@ function playerSetup(el: HTMLIFrameElement, config: TrackingOptions, queryString
   let player = new YT.Player(el.id!, {
     events: { ...playerEvents },
   });
+}
 
-  const trackEvent = (eventName: any, eventSpecificData?: any) => {
-    let youtubeEvent: MediaEventData = buildYoutubeEvent(player, eventName, queryStringParams, eventSpecificData);
+const trackEvent = (player: YT.Player, eventName: any, queryStringParams: any, eventSpecificData?: any) => {
+  let youtubeEvent: MediaEventData = buildYoutubeEvent(player, eventName, queryStringParams, eventSpecificData);
+  trackYoutubeEvent(youtubeEvent);
+};
+
+let currentTime: number = 0;
+
+export function enableSeekTracking(player: YT.Player, eventParamas: any, eventDetail?: any) {
+  setInterval(() => seekEventTracker(player, eventParamas, eventDetail), 500);
+}
+
+function seekEventTracker(player: YT.Player, eventParamas: any, eventDetail?: any) {
+  let playerTime = player.getCurrentTime();
+  if (Math.abs(playerTime - (currentTime + 0.5)) > 1) {
+    let youtubeEvent = buildYoutubeEvent(player, YTCustomEvent.SEEK, eventParamas, eventDetail);
     trackYoutubeEvent(youtubeEvent);
+  }
+  currentTime = playerTime;
+}
+
+let isSeekTrackingEnabled: boolean = false;
+
+export function buildYoutubeEvent(player: YT.Player, eventName: string, eventParamas: any, eventDetail?: any) {
+  const eventActions: { [event: string]: Function } = {
+    [YTStateEvent.PLAYING]: () => {
+      if (!isSeekTrackingEnabled) enableSeekTracking(player, eventParamas, eventDetail);
+    },
+  };
+
+  if (eventName in eventActions) eventActions[eventName]();
+
+  let mediaEventData: MediaPlayerEvent = {
+    type: eventName in YTEventName ? YTEventName[eventName] : eventName,
+    media_type: 'VIDEO',
+  };
+
+  let mediaContext = [getYoutubePlayerEntities(player, eventParamas)];
+
+  let snowplowContext = getSnowplowEntities(eventName, eventDetail);
+  if (snowplowContext) mediaContext.push(snowplowContext);
+
+  return {
+    schema: 'iglu:com.snowplowanalytics/media_player_event/jsonschema/1-0-0',
+    data: mediaEventData,
+    context: mediaContext,
+  };
+}
+
+function getSnowplowEntities(e: any, eventDetail: any): MediaEntities | null {
+  let snowplowData: any = {};
+
+  if (e === SnowplowMediaEvent.PERCENTPROGRESS) {
+    snowplowData.percent = eventDetail.percentThrough;
+  }
+  if (!Object.keys(snowplowData).length) return null;
+
+  return {
+    schema: 'iglu:com.snowplowanalytics/media_player/jsonschema/1-0-0',
+    data: {
+      ...snowplowData,
+    },
+  };
+}
+
+function getYoutubePlayerEntities(player: YT.Player, eventParams: any): any {
+  let playerState: { [index: string]: boolean } = {
+    ended: false,
+    paused: false,
+    buffering: false,
+    cued: false,
+    unstarted: false,
+  };
+  if (player.getPlayerState() !== YT.PlayerState.PLAYING) {
+    playerState[YTStateName[player.getPlayerState()]] = true;
+  }
+
+  let spherical: YT.SphericalProperties = player.getSphericalProperties();
+  if (spherical.fov) {
+    spherical.fov = parseFloat(spherical.fov.toFixed(2));
+  }
+
+  let data = {
+    //player_id: player.getIframe().id,
+    player_id: 'test',
+    auto_play: queryParamPresentAndEnabled(YTQueryStringParameter.AUTOPLAY, eventParams),
+    avaliable_playback_rates: player.getAvailablePlaybackRates(),
+    controls: queryParamPresentAndEnabled(YTQueryStringParameter.CONTROLS, eventParams),
+    current_time: player[YTEntityFunction.CURRENTTIME](),
+    default_playback_rate: 1,
+    duration: player[YTEntityFunction.DURATION](),
+    loaded: parseFloat(player[YTEntityFunction.VIDEOLOADEDFRACTION]().toFixed(2)),
+    muted: player[YTEntityFunction.MUTED](),
+    playback_rate: player[YTEntityFunction.PLAYBACKRATE](),
+    playlist_index: player[YTEntityFunction.PLAYLISTINDEX](),
+    playlist: player[YTEntityFunction.PLAYLIST](),
+    url: player[YTEntityFunction.VIDEOURL](),
+    volume: player[YTEntityFunction.VOLUME](),
+    loop: queryParamPresentAndEnabled(YTQueryStringParameter.LOOP, eventParams),
+    ...playerState,
+    ...spherical,
+  };
+
+  return {
+    schema: 'iglu:org.youtube/youtube/jsonschema/1-0-0',
+    data: data,
   };
 }
