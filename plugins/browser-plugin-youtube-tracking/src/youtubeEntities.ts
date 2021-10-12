@@ -86,4 +86,5 @@ export const YTStateName: { [index: string]: string } = {
 
 export enum YTCustomEvent {
   SEEK = 'seek',
+  VOLUMECHANGE = 'volumechange',
 }

@@ -62,6 +62,7 @@ export function trackYoutubeEvent(
   event: SelfDescribingJson<MediaPlayerEvent> & CommonEventProperties,
   trackers: Array<string> = Object.keys(_trackers)
 ): void {
+  console.log(event.data.type);
   dispatchToTrackersInCollection(trackers, _trackers, (t) => {
     t.core.track(buildSelfDescribingEvent({ event }), event.context, event.timestamp);
   });
@@ -77,6 +78,7 @@ export function configParser(mediaId: string, options?: TrackingOptions): MediaC
   if (options?.captureEvents) {
     let namedEvents = [];
     for (let ev of options.captureEvents) {
+      // If an event is an EventGroup, get the events from that group
       if (EventGroups.hasOwnProperty(ev)) {
         for (let event of EventGroups[ev]) {
           if (namedEvents.indexOf(event) === -1) {
@@ -98,6 +100,10 @@ export function configParser(mediaId: string, options?: TrackingOptions): MediaC
 export function enableYoutubeTracking(args: { id: string; trackingOptions?: TrackingOptions }) {
   let config = configParser(args.id, args.trackingOptions);
   let el: HTMLIFrameElement = document.getElementById(args.id) as HTMLIFrameElement;
+  if (!el) {
+    console.error('Cannot find YouTube IFrame element');
+  }
+  console.log(config);
 
   const tag: HTMLScriptElement = document.createElement('script');
   tag.id = 'test';
@@ -174,7 +180,7 @@ const trackEvent = (player: YT.Player, eventName: any, queryStringParams: any, e
 
 let currentTime: number = 0;
 
-export function enableSeekTracking(player: YT.Player, eventParamas: any, eventDetail?: any) {
+function enableSeekTracking(player: YT.Player, eventParamas: any, eventDetail?: any) {
   setInterval(() => seekEventTracker(player, eventParamas, eventDetail), 500);
 }
 
@@ -187,12 +193,30 @@ function seekEventTracker(player: YT.Player, eventParamas: any, eventDetail?: an
   currentTime = playerTime;
 }
 
+let prevVolume: number;
+
+function enableVolumeTracking(player: YT.Player, eventParamas: any, eventDetail?: any) {
+  prevVolume = player.getVolume();
+  setInterval(() => volumeEventTracker(player, eventParamas, eventDetail), 500);
+}
+
+function volumeEventTracker(player: YT.Player, eventParamas: any, eventDetail?: any) {
+  let playerVolume = player.getVolume();
+  if (playerVolume !== prevVolume) {
+    let youtubeEvent = buildYoutubeEvent(player, YTCustomEvent.VOLUMECHANGE, eventParamas, eventDetail);
+    trackYoutubeEvent(youtubeEvent);
+  }
+  prevVolume = playerVolume;
+}
+
+let isVolumeTrackingEnabled: boolean = false;
 let isSeekTrackingEnabled: boolean = false;
 
-export function buildYoutubeEvent(player: YT.Player, eventName: string, eventParamas: any, eventDetail?: any) {
+function buildYoutubeEvent(player: YT.Player, eventName: string, eventParamas: any, eventDetail?: any) {
   const eventActions: { [event: string]: Function } = {
     [YTStateEvent.PLAYING]: () => {
       if (!isSeekTrackingEnabled) enableSeekTracking(player, eventParamas, eventDetail);
+      if (!isVolumeTrackingEnabled) enableVolumeTracking(player, eventParamas, eventDetail);
     },
   };
 
@@ -249,8 +273,7 @@ function getYoutubePlayerEntities(player: YT.Player, eventParams: any): any {
   }
 
   let data = {
-    //player_id: player.getIframe().id,
-    player_id: 'test',
+    player_id: player.getIframe().id,
     auto_play: queryParamPresentAndEnabled(YTQueryStringParameter.AUTOPLAY, eventParams),
     avaliable_playback_rates: player.getAvailablePlaybackRates(),
     controls: queryParamPresentAndEnabled(YTQueryStringParameter.CONTROLS, eventParams),
