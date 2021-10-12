@@ -7,6 +7,7 @@ export const YTEventName: { [event: string]: string } = {
   ENDED: 'ended',
   BUFFERING: 'buffering',
   UNSTARTED: 'unstarted',
+  PERCENTPROGRESS: 'percentprogress',
   onReady: 'ready',
   onStateChange: 'statechange',
   onPlaybackQualityChange: 'playbackqualitychange',

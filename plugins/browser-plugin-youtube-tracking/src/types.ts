@@ -4,19 +4,22 @@ import { YTCustomEvent, YTPlayerEvent, YTStateEvent } from './youtubeEntities';
 
 export type EventGroup = (YTStateEvent | SnowplowMediaEvent | YTCustomEvent | YTPlayerEvent | string)[];
 
-export interface MediaConf {
+export interface TrackingOptions {
   mediaId: string;
-  percentBoundries: number[];
   captureEvents: EventGroup;
   mediaLabel?: string;
-  percentTimeoutIds: any[];
+  boundry?: {
+    percentBoundries: number[];
+    percentTimeoutIds: any[];
+  };
   volumeChangeTimeout?: any;
 }
 
-export interface TrackingOptions {
+export interface RecievedTrackingOptions {
   percentBoundries?: number[];
-  captureEvents?: EventGroup | string[];
+  captureEvents: EventGroup | string[];
   mediaLabel?: string;
+  percentTimeoutIds?: any[];
 }
 
 export interface SnowplowYoutubeData {
@@ -35,15 +38,12 @@ export interface MediaEntities {
   data: SnowplowYoutubeData;
 }
 
-export interface TextTrackObject {
-  label: string;
-  language: string;
-  kind: string;
-  mode: string;
-}
-
 export interface YTEventData {
   params?: any;
   eventName: YTPlayerEvent | YTStateEvent | YTCustomEvent | SnowplowMediaEvent;
   [index: string]: any;
+}
+
+export interface QueryStringParams {
+  [index: string]: string[] | string | number;
 }

@@ -3,7 +3,11 @@ import { EventGroup } from './types';
 import { YTCustomEvent, YTPlayerEvent, YTStateEvent } from './youtubeEntities';
 import { YTEventName } from './youtubeEvents';
 
-export const AllEvents: EventGroup = [...Object.keys(YTEventName), ...Object.keys(YTCustomEvent)];
+export const AllEvents: EventGroup = [
+  ...Object.keys(YTEventName),
+  ...Object.keys(YTCustomEvent),
+  ...Object.keys(SnowplowMediaEvent),
+];
 
 export const DefaultEvents: EventGroup = [
   YTStateEvent.PAUSED,

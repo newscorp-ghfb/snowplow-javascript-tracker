@@ -45,9 +45,24 @@ export function isElementFullScreen(mediaId: string): boolean {
   return false;
 }
 
-export function queryParamPresentAndEnabled(param: string, params: any) {
-  if (params.hasOwnProperty(param)) {
-    return params[param] === 1;
+export function queryParamPresentAndEnabled(param: string, queryStringParams: any) {
+  if (queryStringParams.hasOwnProperty(param)) {
+    return queryStringParams[param] === 1;
   }
   return false;
+}
+
+export function addEnableJsApiToIframeSrc(queryStringParams: any, el: HTMLIFrameElement): HTMLIFrameElement {
+  if (!queryStringParams.hasOwnProperty('enablejsapi')) {
+    queryStringParams['enablejsapi'] = 1;
+  }
+  let url: string = el.src?.split('?')[0];
+  if (url && url.length > 1) {
+    el.src +=
+      '?' +
+      Object.keys(queryStringParams)
+        .map((k) => `${k}=${queryStringParams[k]}`)
+        .join('&');
+  }
+  return el;
 }

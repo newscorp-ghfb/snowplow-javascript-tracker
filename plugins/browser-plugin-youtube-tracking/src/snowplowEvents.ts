@@ -1,5 +1,5 @@
 enum SnowplowMediaEvent {
-  PERCENTPROGRESS = 'percentprogress',
+  PERCENTPROGRESS = 'PERCENTPROGRESS',
 }
 
 export { SnowplowMediaEvent };
