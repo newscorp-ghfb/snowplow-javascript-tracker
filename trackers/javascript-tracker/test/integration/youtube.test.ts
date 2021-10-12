@@ -28,7 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-import { DockerWrapper, start, stop, fetchMostRecentResult } from '../micro';
+import { DockerWrapper, start, stop, fetchMostRecentResult, fetchResults } from '../micro';
 
 describe('YouTube Tracker', () => {
   let docker: DockerWrapper;
@@ -75,6 +75,47 @@ describe('YouTube Tracker', () => {
     browser.keys(['ArrowRight']);
     return fetchMostRecentResult(docker.url).then((result) => {
       expect(result.event.unstruct_event.data.data.type).toEqual('seek');
+    });
+  });
+
+  it('tracks playback quality change', () => {
+    let keys_to_change_quality = [
+      'Space', // Unpauses to avoid suggested videos
+      'Tab',
+      'Tab',
+      'Tab',
+      'Tab',
+      'Tab',
+      'Tab',
+      'Tab',
+      'Tab',
+      'Space',
+      'ArrowDown',
+      'Space',
+      'ArrowUp',
+      'Space',
+      'Escape',
+    ];
+    for (let k of keys_to_change_quality) {
+      player.keys([k]);
+      browser.pause(200);
+    }
+    return fetchResults(docker.url).then((result) => {
+      expect(result[1].event.unstruct_event.data.data.type).toEqual('playbackqualitychange');
+    });
+  });
+
+  it('tracks volume change', () => {
+    browser.waitUntil(() => $('#youtube').isExisting(), {
+      timeout: 10000,
+      timeoutMsg: 'expected youtube after 5s',
+    });
+    player = $('#youtube');
+    player.click();
+    player.pause(2000);
+    player.keys(['ArrowDown']);
+    return fetchMostRecentResult(docker.url).then((result) => {
+      expect(result.event.unstruct_event.data.data.type).toEqual('volumechange');
     });
   });
 
