@@ -1,11 +1,9 @@
 import { SnowplowMediaEvent } from './snowplowEvents';
 import { EventGroup } from './types';
 import { YTCustomEvent, YTPlayerEvent, YTStateEvent } from './youtubeEntities';
+import { YTEventName } from './youtubeEvents';
 
-export const AllEvents: string[] = Object.keys(YTStateEvent).concat(
-  Object.keys(YTCustomEvent),
-  Object.keys(SnowplowMediaEvent)
-);
+export const AllEvents: EventGroup = [...Object.keys(YTEventName), ...Object.keys(YTCustomEvent)];
 
 export const DefaultEvents: EventGroup = [
   YTStateEvent.PAUSED,
@@ -17,5 +15,6 @@ export const DefaultEvents: EventGroup = [
 ];
 
 export const EventGroups: { [eventGroup: string]: EventGroup } = {
+  AllEvents: AllEvents,
   DefaultEvents: DefaultEvents,
 };
